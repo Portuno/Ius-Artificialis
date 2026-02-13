@@ -22,13 +22,13 @@ export const POST = async (request: Request) => {
       );
     }
 
-    // Query CatastroAPI.es
+    // Query servicio oficial Catastro (ovc.catastro.meh.es) — gratuito, sin API key
     const result = await queryCatastro(referencia_catastral);
 
     if (!result.success || !result.data) {
       return NextResponse.json(
         { error: result.error ?? "Error al consultar el Catastro" },
-        { status: 502 }
+        { status: 503 }
       );
     }
 

@@ -440,14 +440,14 @@ const DocumentDetailClient = ({
                               </strong>
                             </span>
                           )}
-                          {prop.valor_referencia != null && (
-                            <span>
-                              Valor referencia:{" "}
-                              <strong>
-                                {prop.valor_referencia.toLocaleString("es-ES")} €
-                              </strong>
-                            </span>
-                          )}
+                          <span>
+                            Valor referencia:{" "}
+                            <strong>
+                              {prop.valor_referencia != null
+                                ? `${prop.valor_referencia.toLocaleString("es-ES")} €`
+                                : "—"}
+                            </strong>
+                          </span>
                         </div>
 
                         {prop.alerta_fiscal && (
