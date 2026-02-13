@@ -1,5 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
+import type {
+  Heir,
+  InheritanceDeed,
+  Invoice,
+  Property,
+} from "@/types/database";
 import DocumentDetailClient from "./document-detail-client";
 
 interface PageProps {
@@ -22,10 +28,10 @@ const DocumentDetailPage = async ({ params }: PageProps) => {
   }
 
   // Fetch related data based on document type
-  let invoices: unknown[] = [];
-  let deed = null;
-  let heirs: unknown[] = [];
-  let properties: unknown[] = [];
+  let invoices: Invoice[] = [];
+  let deed: InheritanceDeed | null = null;
+  let heirs: Heir[] = [];
+  let properties: Property[] = [];
 
   if (document.doc_type === "factura") {
     const { data } = await supabase
