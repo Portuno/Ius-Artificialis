@@ -97,47 +97,74 @@ const UploadPage = () => {
   });
 
   const handleUploadAndProcess = async () => {
-    if (files.length === 0) return;
+    const processable = files.filter(
+      (f) => f.status === "pending" || f.status === "error"
+    );
+    if (processable.length === 0) return;
     setIsProcessing(true);
 
     for (let i = 0; i < files.length; i++) {
       const uploadedFile = files[i];
-      if (uploadedFile.status !== "pending") continue;
+      const isRetry = uploadedFile.status === "error";
+      if (uploadedFile.status !== "pending" && !isRetry) continue;
 
-      // Step 1: Upload
+      let documentId: string | undefined = uploadedFile.documentId;
+
+      // Step 1: Upload only if pending (no documentId) or error without documentId
+      if (!documentId) {
+        setFiles((prev) =>
+          prev.map((f, idx) => (idx === i ? { ...f, status: "uploading" } : f))
+        );
+
+        try {
+          const formData = new FormData();
+          formData.append("files", uploadedFile.file);
+          if (selectedExpediente) {
+            formData.append("expediente_id", selectedExpediente);
+          }
+
+          const uploadRes = await fetch("/api/documents/upload", {
+            method: "POST",
+            body: formData,
+          });
+
+          const uploadData = await uploadRes.json();
+
+          if (!uploadRes.ok || !uploadData.results?.[0]?.success) {
+            throw new Error(
+              uploadData.results?.[0]?.error ?? "Error al subir archivo"
+            );
+          }
+
+          documentId = uploadData.results[0].document_id;
+        } catch (error) {
+          setFiles((prev) =>
+            prev.map((f, idx) =>
+              idx === i
+                ? {
+                    ...f,
+                    status: "error",
+                    error:
+                      error instanceof Error
+                        ? error.message
+                        : "Error desconocido",
+                  }
+                : f
+            )
+          );
+          toast.error(`Error al subir ${uploadedFile.file.name}`);
+          continue;
+        }
+      }
+
+      // Step 2: Process with Gemini (uploaded now or had documentId from retry)
       setFiles((prev) =>
-        prev.map((f, idx) => (idx === i ? { ...f, status: "uploading" } : f))
+        prev.map((f, idx) =>
+          idx === i ? { ...f, status: "processing", documentId } : f
+        )
       );
 
       try {
-        const formData = new FormData();
-        formData.append("files", uploadedFile.file);
-        if (selectedExpediente) {
-          formData.append("expediente_id", selectedExpediente);
-        }
-
-        const uploadRes = await fetch("/api/documents/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        const uploadData = await uploadRes.json();
-
-        if (!uploadRes.ok || !uploadData.results?.[0]?.success) {
-          throw new Error(
-            uploadData.results?.[0]?.error ?? "Error al subir archivo"
-          );
-        }
-
-        const documentId = uploadData.results[0].document_id;
-
-        // Step 2: Process with Gemini
-        setFiles((prev) =>
-          prev.map((f, idx) =>
-            idx === i ? { ...f, status: "processing", documentId } : f
-          )
-        );
-
         const processRes = await fetch("/api/documents/process", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -156,6 +183,7 @@ const UploadPage = () => {
               ? {
                   ...f,
                   status: "done",
+                  documentId,
                   docType: processData.type,
                   confidence: processData.classification?.confidence,
                 }
@@ -163,9 +191,14 @@ const UploadPage = () => {
           )
         );
 
-        toast.success(`${uploadedFile.file.name} procesado`, {
-          description: `Clasificado como: ${DOC_TYPE_LABELS[processData.type] ?? processData.type}`,
-        });
+        toast.success(
+          isRetry
+            ? `${uploadedFile.file.name} procesado correctamente`
+            : `${uploadedFile.file.name} procesado`,
+          {
+            description: `Clasificado como: ${DOC_TYPE_LABELS[processData.type] ?? processData.type}`,
+          }
+        );
       } catch (error) {
         setFiles((prev) =>
           prev.map((f, idx) =>
@@ -173,6 +206,7 @@ const UploadPage = () => {
               ? {
                   ...f,
                   status: "error",
+                  documentId,
                   error:
                     error instanceof Error
                       ? error.message
@@ -196,7 +230,9 @@ const UploadPage = () => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const pendingCount = files.filter((f) => f.status === "pending").length;
+  const processableCount = files.filter(
+    (f) => f.status === "pending" || f.status === "error"
+  ).length;
   const doneCount = files.filter((f) => f.status === "done").length;
 
   return (
@@ -292,7 +328,7 @@ const UploadPage = () => {
               </button>
               <button
                 onClick={handleUploadAndProcess}
-                disabled={isProcessing || pendingCount === 0}
+                disabled={isProcessing || processableCount === 0}
                 className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
                 {isProcessing ? (
@@ -300,7 +336,7 @@ const UploadPage = () => {
                 ) : null}
                 {isProcessing
                   ? "Procesando..."
-                  : `Procesar ${pendingCount} archivo${pendingCount !== 1 ? "s" : ""}`}
+                  : `Procesar ${processableCount} archivo${processableCount !== 1 ? "s" : ""}`}
               </button>
             </div>
           </div>
@@ -358,7 +394,7 @@ const UploadPage = () => {
                     </div>
                   )}
 
-                  {f.status === "pending" && (
+                  {(f.status === "pending" || f.status === "error") && (
                     <button
                       onClick={() => handleRemoveFile(idx)}
                       className="rounded p-1 text-muted-foreground hover:text-destructive"
