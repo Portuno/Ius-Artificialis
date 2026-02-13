@@ -1,0 +1,99 @@
+import { getGeminiClient, GEMINI_MODEL } from "./client";
+import {
+  invoiceExtractionSchema,
+  invoicesExtractionSchema,
+  type InvoiceExtractionResult,
+} from "./schemas";
+import { zodToJsonSchema } from "zod-to-json-schema";
+
+const INVOICE_PROMPT = `Eres un sistema experto de extracción de datos de facturas para un despacho jurídico y contable español.
+
+Analiza la factura proporcionada y extrae los siguientes campos con la mayor precisión posible:
+
+1. **emisor**: Nombre o razón social del emisor de la factura
+2. **cif**: CIF/NIF del emisor
+3. **numero_factura**: Número de factura
+4. **fecha**: Fecha de emisión (formato YYYY-MM-DD)
+5. **base_imponible**: Base imponible total en euros
+6. **tipos_iva**: Array con cada tipo de IVA aplicado (porcentaje e importe)
+7. **total**: Importe total de la factura en euros
+8. **concepto**: Descripción o concepto principal de la factura
+
+Para cada campo, proporciona:
+- "value": El valor extraído (null si no se encuentra)
+- "confidence": Tu nivel de confianza en la extracción (0.0 a 1.0)
+
+Si un campo no es legible o no está presente, pon value como null y confidence baja.
+Los importes deben ser números decimales (ej: 1234.56).`;
+
+const INVOICES_PROMPT = `Eres un sistema experto de extracción de datos de facturas para un despacho jurídico y contable español.
+
+El documento puede contener **una o más facturas**. Identifica cada factura (por ejemplo cada página puede ser una factura, o puede haber varias en una página). Para cada factura extrae exactamente los mismos campos:
+
+1. **emisor**: Nombre o razón social del emisor
+2. **cif**: CIF/NIF del emisor
+3. **numero_factura**: Número de factura
+4. **fecha**: Fecha de emisión (formato YYYY-MM-DD)
+5. **base_imponible**: Base imponible total en euros
+6. **tipos_iva**: Array con cada tipo de IVA (porcentaje e importe)
+7. **total**: Importe total en euros
+8. **concepto**: Descripción o concepto principal
+
+Devuelve un objeto con una propiedad "facturas" que sea un array: un elemento por cada factura encontrada en el documento. Si solo hay una factura, el array tendrá un solo elemento. Para cada campo de cada factura proporciona "value" (null si no se encuentra) y "confidence" (0.0 a 1.0). Los importes deben ser números decimales (ej: 1234.56).`;
+
+/** Extracts all invoices from a document (multi-page or multi-invoice PDF). */
+export const extractInvoices = async (
+  fileBase64: string,
+  mimeType: string
+): Promise<InvoiceExtractionResult[]> => {
+  const genai = getGeminiClient();
+  const jsonSchema = zodToJsonSchema(invoicesExtractionSchema);
+
+  const response = await genai.models.generateContent({
+    model: GEMINI_MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: INVOICES_PROMPT },
+          {
+            inlineData: {
+              mimeType,
+              data: fileBase64,
+            },
+          },
+        ],
+      },
+    ],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: jsonSchema as Record<string, unknown>,
+    },
+  });
+
+  const text = response.text ?? "";
+  const parsed = JSON.parse(text);
+  const result = invoicesExtractionSchema.parse(parsed);
+  return result.facturas;
+};
+
+/** Single-invoice extraction (uses first invoice from extractInvoices). */
+export const extractInvoice = async (
+  fileBase64: string,
+  mimeType: string
+): Promise<InvoiceExtractionResult> => {
+  const facturas = await extractInvoices(fileBase64, mimeType);
+  if (facturas.length === 0) {
+    return invoiceExtractionSchema.parse({
+      emisor: { value: null, confidence: 0 },
+      cif: { value: null, confidence: 0 },
+      numero_factura: { value: null, confidence: 0 },
+      fecha: { value: null, confidence: 0 },
+      base_imponible: { value: null, confidence: 0 },
+      tipos_iva: [],
+      total: { value: null, confidence: 0 },
+      concepto: { value: null, confidence: 0 },
+    });
+  }
+  return facturas[0];
+};

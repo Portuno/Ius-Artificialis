@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 210 40% 17%;
+    --primary-foreground: 210 20% 98%;
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 210 40% 17%;
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 20% 96%;
+    --accent-foreground: 210 40% 17%;
+    --destructive: 6 78% 57%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 214 20% 90%;
+    --input: 214 20% 90%;
+    --ring: 210 40% 17%;
+    --radius: 0.5rem;
+
+    /* Custom Ius Artificialis colors */
+    --success: 145 63% 42%;
+    --success-foreground: 0 0% 98%;
+    --warning: 37 90% 51%;
+    --warning-foreground: 0 0% 98%;
+    --gold: 42 64% 55%;
+    --gold-foreground: 222 47% 11%;
+  }
+
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 210 20% 98%;
+    --card: 222 47% 8%;
+    --card-foreground: 210 20% 98%;
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 210 40% 60%;
+    --primary-foreground: 222 47% 6%;
+    --secondary: 215 20% 16%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 215 20% 16%;
+    --muted-foreground: 215 16% 56%;
+    --accent: 215 20% 16%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 6 78% 57%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 215 20% 18%;
+    --input: 215 20% 18%;
+    --ring: 210 40% 60%;
+
+    --success: 145 63% 50%;
+    --success-foreground: 0 0% 98%;
+    --warning: 37 90% 60%;
+    --warning-foreground: 0 0% 6%;
+    --gold: 42 64% 60%;
+    --gold-foreground: 0 0% 98%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
