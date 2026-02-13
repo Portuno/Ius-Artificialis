@@ -54,10 +54,11 @@ const Sidebar = () => {
       {/* Navigation */}
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">
         {NAV_ITEMS.map((item) => {
-          const isActive =
-            item.href === "/"
+          const isActive = pathname
+            ? item.href === "/"
               ? pathname === "/"
-              : pathname.startsWith(item.href);
+              : pathname.startsWith(item.href)
+            : false;
 
           return (
             <Link

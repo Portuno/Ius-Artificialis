@@ -17,6 +17,7 @@ const Header = () => {
   const pathname = usePathname();
 
   const getTitle = () => {
+    if (!pathname) return "Ius Artificialis";
     if (
       pathname.startsWith("/expedientes/") &&
       pathname !== "/expedientes" &&

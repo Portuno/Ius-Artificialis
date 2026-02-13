@@ -76,7 +76,7 @@ const UploadPage = () => {
 
   // Pre-select expediente from URL param
   useEffect(() => {
-    const expParam = searchParams.get("expediente");
+    const expParam = searchParams?.get("expediente");
     if (expParam) {
       setSelectedExpediente(expParam);
     }
