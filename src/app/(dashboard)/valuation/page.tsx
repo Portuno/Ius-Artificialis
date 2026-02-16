@@ -12,11 +12,18 @@ import {
   Search,
 } from "lucide-react";
 import type { Property } from "@/types/database";
+import PropertyCatastroCard from "@/components/catastro/property-catastro-card";
+
+const DELAY_BETWEEN_CATASTRO_MS = 400;
 
 const ValuationPage = () => {
   const [properties, setProperties] = useState<Property[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [queryingId, setQueryingId] = useState<string | null>(null);
+  const [queryAllProgress, setQueryAllProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
 
   const loadProperties = useCallback(async () => {
     const supabase = createClient();
@@ -33,7 +40,10 @@ const ValuationPage = () => {
     loadProperties();
   }, [loadProperties]);
 
-  const handleQueryCatastro = async (property: Property) => {
+  const handleQueryCatastro = async (
+    property: Property,
+    options?: { silent?: boolean }
+  ) => {
     if (!property.referencia_catastral) return;
 
     setQueryingId(property.id);
@@ -52,7 +62,9 @@ const ValuationPage = () => {
 
       if (!res.ok) throw new Error(data.error);
 
-      toast.success("Datos del Catastro obtenidos");
+      if (!options?.silent) {
+        toast.success("Datos del Catastro obtenidos");
+      }
       loadProperties();
     } catch (error) {
       toast.error(
@@ -69,10 +81,24 @@ const ValuationPage = () => {
     const pending = properties.filter(
       (p) => !p.catastro_consultado && p.referencia_catastral
     );
+    if (pending.length === 0) return;
 
-    for (const property of pending) {
-      await handleQueryCatastro(property);
+    setQueryAllProgress({ current: 0, total: pending.length });
+
+    for (let i = 0; i < pending.length; i++) {
+      setQueryAllProgress({ current: i + 1, total: pending.length });
+      await handleQueryCatastro(pending[i], { silent: true });
+      if (i < pending.length - 1) {
+        await new Promise((r) => setTimeout(r, DELAY_BETWEEN_CATASTRO_MS));
+      }
     }
+
+    setQueryAllProgress(null);
+    toast.success(
+      pending.length === 1
+        ? "Catastro consultado"
+        : `Consultados ${pending.length} inmuebles en Catastro`
+    );
   };
 
   const pendingCount = properties.filter(
@@ -111,9 +137,19 @@ const ValuationPage = () => {
             onClick={handleQueryAll}
             disabled={queryingId !== null}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+            aria-label={`Consultar Catastro de ${pendingCount} inmuebles`}
           >
-            <Search className="h-4 w-4" />
-            Consultar Todos ({pendingCount})
+            {queryAllProgress ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Consultando {queryAllProgress.current}/{queryAllProgress.total}
+              </>
+            ) : (
+              <>
+                <Search className="h-4 w-4" />
+                Consultar Todos ({pendingCount})
+              </>
+            )}
           </button>
         )}
       </div>
@@ -182,7 +218,11 @@ const ValuationPage = () => {
                   <p className="text-lg font-bold">
                     {prop.valor_referencia != null
                       ? `${prop.valor_referencia.toLocaleString("es-ES")} €`
-                      : "—"}
+                      : !prop.catastro_consultado && prop.referencia_catastral
+                        ? "Pendiente de consultar Catastro"
+                        : prop.catastro_consultado
+                          ? "No disponible en esta consulta de Catastro (habitual en rústicos)"
+                          : "—"}
                   </p>
                 </div>
               </div>
@@ -199,28 +239,8 @@ const ValuationPage = () => {
                 </div>
               )}
 
-              {/* Catastro details */}
-              {prop.catastro_consultado && (
-                <div className="space-y-1 rounded bg-muted p-2 text-xs">
-                  {prop.catastro_direccion && (
-                    <p className="flex items-center gap-1">
-                      <MapPin className="h-3 w-3" />
-                      {prop.catastro_direccion}
-                      {prop.catastro_municipio &&
-                        `, ${prop.catastro_municipio}`}
-                      {prop.catastro_provincia &&
-                        ` (${prop.catastro_provincia})`}
-                    </p>
-                  )}
-                  {prop.catastro_superficie && (
-                    <p>Superficie: {prop.catastro_superficie} m²</p>
-                  )}
-                  {prop.catastro_uso && <p>Uso: {prop.catastro_uso}</p>}
-                  {prop.catastro_anio_construccion && (
-                    <p>Año construcción: {prop.catastro_anio_construccion}</p>
-                  )}
-                </div>
-              )}
+              {/* Catastro details + link to Sede Catastro */}
+              <PropertyCatastroCard property={prop} />
 
               {/* Query button */}
               {!prop.catastro_consultado && prop.referencia_catastral && (

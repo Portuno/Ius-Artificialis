@@ -56,6 +56,18 @@ export const POST = async (request: Request) => {
         alertaFiscal = desviacionFiscal > 20;
       }
 
+      const rawDataWithExtras: Record<string, unknown> = {
+        ...result.data.raw_data,
+        tipo_bien: result.data.tipo_bien,
+        domicilio_tributario: result.data.domicilio_tributario,
+        bloque: result.data.bloque,
+        escalera: result.data.escalera,
+        planta: result.data.planta,
+        puerta: result.data.puerta,
+        coeficiente_participacion: result.data.coeficiente_participacion,
+        num_unidades_constructivas: result.data.num_unidades_constructivas,
+      };
+
       await supabase
         .from("properties")
         .update({
@@ -65,7 +77,7 @@ export const POST = async (request: Request) => {
           catastro_superficie: result.data.superficie,
           catastro_uso: result.data.uso,
           catastro_anio_construccion: result.data.anio_construccion,
-          catastro_raw_data: result.data.raw_data,
+          catastro_raw_data: rawDataWithExtras,
           valor_referencia: valorReferencia,
           desviacion_fiscal: desviacionFiscal,
           alerta_fiscal: alertaFiscal,

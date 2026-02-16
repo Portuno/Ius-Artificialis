@@ -4,12 +4,19 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import {
-  Download,
   FileJson,
   FileSpreadsheet,
   Loader2,
   CheckCircle2,
+  FolderOpen,
+  ListFilter,
 } from "lucide-react";
+import type { Expediente } from "@/types/database";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
+
+type ExportFilterMode = "all" | "expedientes";
 
 const ExportPage = () => {
   const [validatedCount, setValidatedCount] = useState(0);
@@ -18,6 +25,11 @@ const ExportPage = () => {
   const [propertyCount, setPropertyCount] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
   const [jsonPreview, setJsonPreview] = useState<string | null>(null);
+  const [expedientes, setExpedientes] = useState<Expediente[]>([]);
+  const [filterMode, setFilterMode] = useState<ExportFilterMode>("all");
+  const [selectedExpedienteIds, setSelectedExpedienteIds] = useState<string[]>(
+    []
+  );
 
   const loadCounts = useCallback(async () => {
     const supabase = createClient();
@@ -47,17 +59,65 @@ const ExportPage = () => {
     setPropertyCount(propCount ?? 0);
   }, []);
 
+  const loadExpedientes = useCallback(async () => {
+    try {
+      const res = await fetch("/api/expedientes");
+      const data = await res.json();
+      if (data.expedientes) {
+        setExpedientes(data.expedientes);
+      }
+    } catch {
+      setExpedientes([]);
+    }
+  }, []);
+
   useEffect(() => {
     loadCounts();
   }, [loadCounts]);
 
+  useEffect(() => {
+    loadExpedientes();
+  }, [loadExpedientes]);
+
+  const getExportBody = () => {
+    const base: { format: string; expediente_ids?: string[] } = {
+      format: "json",
+    };
+    if (filterMode === "expedientes" && selectedExpedienteIds.length > 0) {
+      base.expediente_ids = selectedExpedienteIds;
+    }
+    return base;
+  };
+
+  const canExport =
+    validatedCount > 0 &&
+    (filterMode === "all" ||
+      (filterMode === "expedientes" && selectedExpedienteIds.length > 0));
+
+  const handleToggleExpediente = (expedienteId: string) => {
+    setSelectedExpedienteIds((prev) =>
+      prev.includes(expedienteId)
+        ? prev.filter((id) => id !== expedienteId)
+        : [...prev, expedienteId]
+    );
+  };
+
+  const handleSelectAllExpedientes = () => {
+    if (selectedExpedienteIds.length === expedientes.length) {
+      setSelectedExpedienteIds([]);
+    } else {
+      setSelectedExpedienteIds(expedientes.map((e) => e.id));
+    }
+  };
+
   const handleExportJSON = async () => {
     setIsExporting(true);
     try {
+      const body = { ...getExportBody(), format: "json" };
       const res = await fetch("/api/export", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ format: "json" }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -92,10 +152,11 @@ const ExportPage = () => {
   const handleExportExcel = async () => {
     setIsExporting(true);
     try {
+      const body = { ...getExportBody(), format: "excel" };
       const res = await fetch("/api/export", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ format: "excel" }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -153,11 +214,121 @@ const ExportPage = () => {
         </div>
       </div>
 
+      {/* Filter: Todos vs por expedientes */}
+      <div className="space-y-3 rounded-lg border bg-card p-4">
+        <h3 className="flex items-center gap-2 text-sm font-medium">
+          <ListFilter className="h-4 w-4" aria-hidden />
+          Filtrar datos a exportar
+        </h3>
+        <div className="flex flex-wrap gap-4">
+          <label
+            className={cn(
+              "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors",
+              filterMode === "all"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-input hover:bg-muted/50"
+            )}
+          >
+            <input
+              type="radio"
+              name="export-filter"
+              checked={filterMode === "all"}
+              onChange={() => setFilterMode("all")}
+              className="sr-only"
+              aria-label="Exportar todos los datos"
+            />
+            <FolderOpen className="h-4 w-4" aria-hidden />
+            Todos
+          </label>
+          <label
+            className={cn(
+              "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors",
+              filterMode === "expedientes"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-input hover:bg-muted/50"
+            )}
+          >
+            <input
+              type="radio"
+              name="export-filter"
+              checked={filterMode === "expedientes"}
+              onChange={() => setFilterMode("expedientes")}
+              className="sr-only"
+              aria-label="Exportar por expedientes seleccionados"
+            />
+            <ListFilter className="h-4 w-4" aria-hidden />
+            Por expedientes
+          </label>
+        </div>
+
+        {filterMode === "expedientes" && (
+          <div className="space-y-2">
+            {expedientes.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No hay expedientes. Crea expedientes y asocia documentos para
+                filtrar por ellos.
+              </p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <Label className="text-muted-foreground">
+                    Selecciona uno o más expedientes
+                  </Label>
+                  <button
+                    type="button"
+                    onClick={handleSelectAllExpedientes}
+                    className="text-xs text-primary hover:underline"
+                    aria-label={
+                      selectedExpedienteIds.length === expedientes.length
+                        ? "Quitar todos"
+                        : "Seleccionar todos los expedientes"
+                    }
+                  >
+                    {selectedExpedienteIds.length === expedientes.length
+                      ? "Quitar todos"
+                      : "Seleccionar todos"}
+                  </button>
+                </div>
+                <ScrollArea className="h-[180px] rounded-md border border-input p-2">
+                  <ul className="space-y-1" role="group" aria-label="Expedientes disponibles">
+                    {expedientes.map((exp) => (
+                      <li key={exp.id}>
+                        <label
+                          className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/50"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleToggleExpediente(exp.id);
+                            }
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedExpedienteIds.includes(exp.id)}
+                            onChange={() => handleToggleExpediente(exp.id)}
+                            className="h-4 w-4 rounded border-input"
+                            aria-label={`Expediente ${exp.numero_expediente} - ${exp.titulo}`}
+                          />
+                          <span className="truncate">
+                            {exp.numero_expediente} — {exp.titulo}
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </ScrollArea>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Export Options */}
       <div className="grid grid-cols-2 gap-4">
         <button
           onClick={handleExportJSON}
-          disabled={isExporting || validatedCount === 0}
+          disabled={isExporting || !canExport}
           className="flex flex-col items-center gap-3 rounded-lg border bg-card p-6 text-center transition-colors hover:border-primary/50 hover:bg-muted/50 disabled:opacity-50"
           aria-label="Exportar como JSON"
           tabIndex={0}
@@ -177,7 +348,7 @@ const ExportPage = () => {
 
         <button
           onClick={handleExportExcel}
-          disabled={isExporting || validatedCount === 0}
+          disabled={isExporting || !canExport}
           className="flex flex-col items-center gap-3 rounded-lg border bg-card p-6 text-center transition-colors hover:border-success/50 hover:bg-muted/50 disabled:opacity-50"
           aria-label="Exportar como Excel"
           tabIndex={0}
@@ -196,11 +367,15 @@ const ExportPage = () => {
         </button>
       </div>
 
-      {validatedCount === 0 && (
+      {!canExport && (
         <div className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-warning">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
-          No hay documentos validados para exportar. Primero valida los
-          documentos extraídos desde la cola de validación.
+          {validatedCount === 0
+            ? "No hay documentos validados para exportar. Primero valida los documentos extraídos desde la cola de validación."
+            : filterMode === "expedientes" &&
+                selectedExpedienteIds.length === 0
+              ? "Selecciona al menos un expediente para exportar."
+              : "No hay datos que exportar con el filtro actual."}
         </div>
       )}
 

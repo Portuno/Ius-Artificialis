@@ -2,8 +2,10 @@
 
 import { Badge } from "@/components/ui/badge";
 import type { Property } from "@/types/database";
-import { MapPin, AlertTriangle, Home } from "lucide-react";
+import { MapPin, AlertTriangle, Home, ExternalLink } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
+import { getCatastroPropertyUrl } from "@/lib/catastro/client";
 
 interface CuadrantePatrimonialProps {
   properties: Property[];
@@ -70,9 +72,33 @@ const CuadrantePatrimonial = ({ properties }: CuadrantePatrimonialProps) => {
                       {property.descripcion || "Inmueble sin descripcion"}
                     </p>
                     {property.referencia_catastral && (
-                      <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <p className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
                         <MapPin className="h-3 w-3" />
                         Ref: {property.referencia_catastral}
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const url = getCatastroPropertyUrl(
+                              property.referencia_catastral!
+                            );
+                            try {
+                              await navigator.clipboard.writeText(
+                                property.referencia_catastral
+                              );
+                            } catch {
+                              /* ignore */
+                            }
+                            window.open(url, "_blank", "noopener,noreferrer");
+                            toast.info(
+                              "Referencia copiada. Pega (Ctrl+V) en el campo de la Sede del Catastro."
+                            );
+                          }}
+                          className="inline-flex items-center gap-0.5 text-primary hover:underline"
+                          aria-label={`Abrir Catastro y copiar ref: ${property.referencia_catastral}`}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Catastro
+                        </button>
                       </p>
                     )}
                   </div>

@@ -13,7 +13,7 @@ export const POST = async (request: Request) => {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
-    const { format, document_ids } = await request.json();
+    const { format, document_ids, expediente_ids } = await request.json();
 
     // Fetch validated documents
     let query = supabase
@@ -24,6 +24,10 @@ export const POST = async (request: Request) => {
 
     if (document_ids && document_ids.length > 0) {
       query = query.in("id", document_ids);
+    }
+
+    if (expediente_ids && expediente_ids.length > 0) {
+      query = query.in("expediente_id", expediente_ids);
     }
 
     const { data: documents } = await query;

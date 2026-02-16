@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import ConfidenceIndicator from "@/components/documents/confidence-indicator";
+import PropertyCatastroCard from "@/components/catastro/property-catastro-card";
+import { Input } from "@/components/ui/input";
 import {
   CheckCircle2,
   Loader2,
@@ -12,6 +14,7 @@ import {
   Users,
   Building2,
   AlertTriangle,
+  Pencil,
 } from "lucide-react";
 import type {
   Document,
@@ -20,6 +23,16 @@ import type {
   Heir,
   Property,
 } from "@/types/database";
+
+type InvoiceDraft = {
+  emisor: string;
+  cif: string;
+  numero_factura: string;
+  fecha: string;
+  base_imponible: string;
+  total: string;
+  concepto: string;
+};
 
 interface DocumentDetailClientProps {
   document: Document;
@@ -30,6 +43,17 @@ interface DocumentDetailClientProps {
   fileUrl: string;
 }
 
+const invoiceToDraft = (inv: Invoice): InvoiceDraft => ({
+  emisor: inv.emisor ?? "",
+  cif: inv.cif ?? "",
+  numero_factura: inv.numero_factura ?? "",
+  fecha: inv.fecha ?? "",
+  base_imponible:
+    inv.base_imponible != null ? String(inv.base_imponible) : "",
+  total: inv.total != null ? String(inv.total) : "",
+  concepto: inv.concepto ?? "",
+});
+
 const DocumentDetailClient = ({
   document: doc,
   invoices,
@@ -39,10 +63,15 @@ const DocumentDetailClient = ({
   fileUrl,
 }: DocumentDetailClientProps) => {
   const [isValidating, setIsValidating] = useState(false);
-  const [selectedInvoiceIndex, setSelectedInvoiceIndex] = useState(0);
+  const [selectedInvoiceIndex, setSelectedInvoiceIndex] = useState(() => {
+    const first = invoices.findIndex((inv) => !inv.validated);
+    return first >= 0 ? first : 0;
+  });
   const [isQueryingCatastro, setIsQueryingCatastro] = useState<string | null>(
     null
   );
+  const [isEditingInvoice, setIsEditingInvoice] = useState(false);
+  const [draftInvoice, setDraftInvoice] = useState<InvoiceDraft | null>(null);
   const router = useRouter();
   const supabase = createClient();
 
@@ -52,6 +81,49 @@ const DocumentDetailClient = ({
     invoices.length > 0 &&
     invoices.every((inv) => inv.validated);
   const isValidated = doc.status === "validated";
+
+  const pdfPage =
+    selectedInvoice?.page_number != null
+      ? selectedInvoice.page_number
+      : selectedInvoiceIndex + 1;
+  const pdfSrc =
+    doc.file_type === "pdf"
+      ? `${fileUrl.split("#")[0]}#page=${pdfPage}`
+      : fileUrl;
+
+  useEffect(() => {
+    setIsEditingInvoice(false);
+    setDraftInvoice(null);
+  }, [selectedInvoiceIndex, selectedInvoice?.id]);
+
+  const saveDraftToInvoice = useCallback(async () => {
+    if (!selectedInvoice || !draftInvoice) return;
+    const base = parseFloat(draftInvoice.base_imponible.replace(",", "."));
+    const total = parseFloat(draftInvoice.total.replace(",", "."));
+    await supabase
+      .from("invoices")
+      .update({
+        emisor: draftInvoice.emisor || null,
+        cif: draftInvoice.cif || null,
+        numero_factura: draftInvoice.numero_factura || null,
+        fecha: draftInvoice.fecha || null,
+        base_imponible: Number.isNaN(base) ? null : base,
+        total: Number.isNaN(total) ? null : total,
+        concepto: draftInvoice.concepto || null,
+      })
+      .eq("id", selectedInvoice.id);
+  }, [selectedInvoice, draftInvoice, supabase]);
+
+  const getNextUnvalidatedIndex = useCallback(
+    (currentIndex: number) => {
+      const next = invoices.findIndex(
+        (inv, i) => i > currentIndex && !inv.validated
+      );
+      if (next >= 0) return next;
+      return invoices.findIndex((inv) => !inv.validated);
+    },
+    [invoices]
+  );
 
   const handleValidate = async () => {
     if (deed) {
@@ -81,6 +153,12 @@ const DocumentDetailClient = ({
     if (!selectedInvoice) return;
     setIsValidating(true);
     try {
+      if (isEditingInvoice && draftInvoice) {
+        await saveDraftToInvoice();
+        setIsEditingInvoice(false);
+        setDraftInvoice(null);
+      }
+
       await supabase
         .from("invoices")
         .update({
@@ -110,6 +188,11 @@ const DocumentDetailClient = ({
           ? "Todas las facturas validadas"
           : "Factura validada correctamente"
       );
+
+      const nextIdx = getNextUnvalidatedIndex(selectedInvoiceIndex);
+      if (nextIdx >= 0 && nextIdx !== selectedInvoiceIndex) {
+        setSelectedInvoiceIndex(nextIdx);
+      }
       router.refresh();
     } catch {
       toast.error("Error al validar");
@@ -121,6 +204,18 @@ const DocumentDetailClient = ({
   const showValidateButton =
     !isValidated &&
     ((selectedInvoice && !selectedInvoice.validated) || (deed && !deed.validated));
+
+  const showEditButton =
+    !isValidated &&
+    selectedInvoice &&
+    !selectedInvoice.validated &&
+    !deed;
+
+  const handleStartEdit = () => {
+    if (!selectedInvoice) return;
+    setIsEditingInvoice(true);
+    setDraftInvoice(invoiceToDraft(selectedInvoice));
+  };
 
   const handleQueryCatastro = async (property: Property) => {
     if (!property.referencia_catastral) return;
@@ -165,9 +260,10 @@ const DocumentDetailClient = ({
         <div className="h-full p-2">
           {doc.file_type === "pdf" ? (
             <iframe
-              src={fileUrl}
+              key={pdfPage}
+              src={pdfSrc}
               className="h-full w-full rounded"
-              title="Vista previa del documento"
+              title={`Vista previa del documento - página ${pdfPage}`}
             />
           ) : (
             <img
@@ -190,22 +286,53 @@ const DocumentDetailClient = ({
                 : "Pendiente de validación"}
             </p>
           </div>
-          {showValidateButton && (
-            <button
-              onClick={handleValidate}
-              disabled={isValidating}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-success px-3 text-xs font-medium text-success-foreground transition-colors hover:bg-success/90 disabled:opacity-50"
-              aria-label="Validar y fijar datos"
-              tabIndex={0}
-            >
-              {isValidating ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <CheckCircle2 className="h-3 w-3" />
-              )}
-              Validar y Fijar Datos
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {isEditingInvoice ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditingInvoice(false);
+                  setDraftInvoice(null);
+                }}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-input bg-muted/50 px-3 text-xs font-medium transition-colors hover:bg-muted"
+                aria-label="Cancelar edición"
+                tabIndex={0}
+              >
+                Cancelar
+              </button>
+            ) : (
+              showEditButton && (
+                <button
+                  type="button"
+                  onClick={handleStartEdit}
+                  disabled={isValidating}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 px-3 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-50"
+                  aria-label="Editar datos de la factura"
+                  tabIndex={0}
+                >
+                  <Pencil className="h-3 w-3" />
+                  Editar
+                </button>
+              )
+            )}
+            {showValidateButton && (
+              <button
+                type="button"
+                onClick={handleValidate}
+                disabled={isValidating}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-success px-3 text-xs font-medium text-success-foreground transition-colors hover:bg-success/90 disabled:opacity-50"
+                aria-label="Validar y fijar datos"
+                tabIndex={0}
+              >
+                {isValidating ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-3 w-3" />
+                )}
+                Validar
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="space-y-6 p-4">
@@ -275,74 +402,150 @@ const DocumentDetailClient = ({
                   </span>
                 )}
               </h4>
-              <div className="grid grid-cols-2 gap-3">
-                <FieldDisplay
-                  label="Emisor"
-                  value={selectedInvoice.emisor}
-                  confidence={selectedInvoice.confidence_scores?.emisor}
-                />
-                <FieldDisplay
-                  label="CIF"
-                  value={selectedInvoice.cif}
-                  confidence={selectedInvoice.confidence_scores?.cif}
-                />
-                <FieldDisplay
-                  label="N.º Factura"
-                  value={selectedInvoice.numero_factura}
-                  confidence={selectedInvoice.confidence_scores?.numero_factura}
-                />
-                <FieldDisplay
-                  label="Fecha"
-                  value={selectedInvoice.fecha}
-                  confidence={selectedInvoice.confidence_scores?.fecha}
-                />
-                <FieldDisplay
-                  label="Base Imponible"
-                  value={
-                    selectedInvoice.base_imponible != null
-                      ? `${selectedInvoice.base_imponible.toLocaleString("es-ES")} €`
-                      : null
-                  }
-                  confidence={selectedInvoice.confidence_scores?.base_imponible}
-                />
-                <FieldDisplay
-                  label="Total"
-                  value={
-                    selectedInvoice.total != null
-                      ? `${selectedInvoice.total.toLocaleString("es-ES")} €`
-                      : null
-                  }
-                  confidence={selectedInvoice.confidence_scores?.total}
-                />
-              </div>
 
-              {selectedInvoice.tipos_iva && selectedInvoice.tipos_iva.length > 0 && (
-                <div>
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">
-                    Tipos de IVA
-                  </p>
-                  <div className="space-y-1">
-                    {(selectedInvoice.tipos_iva as { porcentaje: number; importe: number }[]).map(
-                      (iva, i) => (
-                        <div
-                          key={i}
-                          className="flex justify-between rounded bg-muted px-2 py-1 text-xs"
-                        >
-                          <span>{iva.porcentaje}%</span>
-                          <span>{iva.importe.toLocaleString("es-ES")} €</span>
-                        </div>
+              {isEditingInvoice && draftInvoice ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <FieldEdit
+                    label="Emisor"
+                    value={draftInvoice.emisor}
+                    onChange={(v) =>
+                      setDraftInvoice((prev) =>
+                        prev ? { ...prev, emisor: v } : prev
                       )
-                    )}
+                    }
+                  />
+                  <FieldEdit
+                    label="CIF"
+                    value={draftInvoice.cif}
+                    onChange={(v) =>
+                      setDraftInvoice((prev) =>
+                        prev ? { ...prev, cif: v } : prev
+                      )
+                    }
+                  />
+                  <FieldEdit
+                    label="N.º Factura"
+                    value={draftInvoice.numero_factura}
+                    onChange={(v) =>
+                      setDraftInvoice((prev) =>
+                        prev ? { ...prev, numero_factura: v } : prev
+                      )
+                    }
+                  />
+                  <FieldEdit
+                    label="Fecha (YYYY-MM-DD)"
+                    value={draftInvoice.fecha}
+                    onChange={(v) =>
+                      setDraftInvoice((prev) =>
+                        prev ? { ...prev, fecha: v } : prev
+                      )
+                    }
+                  />
+                  <FieldEdit
+                    label="Base Imponible"
+                    value={draftInvoice.base_imponible}
+                    onChange={(v) =>
+                      setDraftInvoice((prev) =>
+                        prev ? { ...prev, base_imponible: v } : prev
+                      )
+                    }
+                  />
+                  <FieldEdit
+                    label="Total"
+                    value={draftInvoice.total}
+                    onChange={(v) =>
+                      setDraftInvoice((prev) =>
+                        prev ? { ...prev, total: v } : prev
+                      )
+                    }
+                  />
+                  <div className="col-span-2">
+                    <FieldEdit
+                      label="Concepto"
+                      value={draftInvoice.concepto}
+                      onChange={(v) =>
+                        setDraftInvoice((prev) =>
+                          prev ? { ...prev, concepto: v } : prev
+                        )
+                      }
+                    />
                   </div>
                 </div>
-              )}
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FieldDisplay
+                      label="Emisor"
+                      value={selectedInvoice.emisor}
+                      confidence={selectedInvoice.confidence_scores?.emisor}
+                    />
+                    <FieldDisplay
+                      label="CIF"
+                      value={selectedInvoice.cif}
+                      confidence={selectedInvoice.confidence_scores?.cif}
+                    />
+                    <FieldDisplay
+                      label="N.º Factura"
+                      value={selectedInvoice.numero_factura}
+                      confidence={selectedInvoice.confidence_scores?.numero_factura}
+                    />
+                    <FieldDisplay
+                      label="Fecha"
+                      value={selectedInvoice.fecha}
+                      confidence={selectedInvoice.confidence_scores?.fecha}
+                    />
+                    <FieldDisplay
+                      label="Base Imponible"
+                      value={
+                        selectedInvoice.base_imponible != null
+                          ? `${selectedInvoice.base_imponible.toLocaleString("es-ES")} €`
+                          : null
+                      }
+                      confidence={selectedInvoice.confidence_scores?.base_imponible}
+                    />
+                    <FieldDisplay
+                      label="Total"
+                      value={
+                        selectedInvoice.total != null
+                          ? `${selectedInvoice.total.toLocaleString("es-ES")} €`
+                          : null
+                      }
+                      confidence={selectedInvoice.confidence_scores?.total}
+                    />
+                  </div>
 
-              {selectedInvoice.concepto && (
-                <FieldDisplay
-                  label="Concepto"
-                  value={selectedInvoice.concepto}
-                  confidence={selectedInvoice.confidence_scores?.concepto}
-                />
+                  {selectedInvoice.tipos_iva &&
+                    selectedInvoice.tipos_iva.length > 0 && (
+                      <div>
+                        <p className="mb-1 text-xs font-medium text-muted-foreground">
+                          Tipos de IVA
+                        </p>
+                        <div className="space-y-1">
+                          {(selectedInvoice.tipos_iva as { porcentaje: number; importe: number }[]).map(
+                            (iva, i) => (
+                              <div
+                                key={i}
+                                className="flex justify-between rounded bg-muted px-2 py-1 text-xs"
+                              >
+                                <span>{iva.porcentaje}%</span>
+                                <span>
+                                  {iva.importe.toLocaleString("es-ES")} €
+                                </span>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                  {selectedInvoice.concepto && (
+                    <FieldDisplay
+                      label="Concepto"
+                      value={selectedInvoice.concepto}
+                      confidence={selectedInvoice.confidence_scores?.concepto}
+                    />
+                  )}
+                </>
               )}
             </div>
           )}
@@ -458,18 +661,7 @@ const DocumentDetailClient = ({
                           </div>
                         )}
 
-                        {prop.catastro_consultado && prop.catastro_direccion && (
-                          <div className="rounded bg-muted px-2 py-1.5 text-xs space-y-0.5">
-                            <p className="flex items-center gap-1">
-                              <MapPin className="h-3 w-3" />
-                              {prop.catastro_direccion}
-                            </p>
-                            {prop.catastro_superficie && (
-                              <p>Superficie: {prop.catastro_superficie} m²</p>
-                            )}
-                            {prop.catastro_uso && <p>Uso: {prop.catastro_uso}</p>}
-                          </div>
-                        )}
+                        <PropertyCatastroCard property={prop} compact />
 
                         {!prop.catastro_consultado &&
                           prop.referencia_catastral && (
@@ -532,6 +724,28 @@ const FieldDisplay = ({
     <p className="rounded bg-muted px-2 py-1.5 text-sm">
       {value ?? <span className="text-muted-foreground">—</span>}
     </p>
+  </div>
+);
+
+const FieldEdit = ({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) => (
+  <div className="space-y-1">
+    <label className="text-xs font-medium text-muted-foreground">
+      {label}
+    </label>
+    <Input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="h-8 text-sm"
+      aria-label={label}
+    />
   </div>
 );
 

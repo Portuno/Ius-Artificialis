@@ -236,19 +236,19 @@ const UploadPage = () => {
   const doneCount = files.filter((f) => f.status === "done").length;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-4 px-3 sm:space-y-6 sm:px-4">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight">
+        <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
           Centro de Carga Documental
         </h2>
-        <p className="text-muted-foreground">
+        <p className="text-sm text-muted-foreground sm:text-base">
           Arrastra y suelta tus documentos. El sistema los clasificará y
           extraerá los datos automáticamente.
         </p>
       </div>
 
       {/* Expediente Selector */}
-      <div className="rounded-lg border bg-card p-4">
+      <div className="rounded-lg border bg-card p-3 sm:p-4">
         <Label className="mb-2 flex items-center gap-2 text-sm font-medium">
           <FolderOpen className="h-4 w-4 text-primary" />
           Vincular a Expediente
@@ -278,7 +278,7 @@ const UploadPage = () => {
       <div
         {...getRootProps()}
         className={cn(
-          "flex min-h-[240px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center transition-colors",
+          "flex min-h-[180px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-4 text-center transition-colors sm:min-h-[240px] sm:p-8",
           isDragActive
             ? "border-primary bg-primary/5"
             : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50"
@@ -290,20 +290,20 @@ const UploadPage = () => {
         <input {...getInputProps()} />
         <Upload
           className={cn(
-            "mb-4 h-12 w-12",
+            "mb-2 h-10 w-10 sm:mb-4 sm:h-12 sm:w-12",
             isDragActive ? "text-primary" : "text-muted-foreground"
           )}
         />
         {isDragActive ? (
-          <p className="text-lg font-medium text-primary">
+          <p className="text-base font-medium text-primary sm:text-lg">
             Suelta los archivos aquí...
           </p>
         ) : (
           <>
-            <p className="text-lg font-medium">
+            <p className="text-sm font-medium sm:text-lg">
               Arrastra documentos o haz clic para seleccionar
             </p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
               Formatos aceptados: PDF, JPG, PNG, TIFF
             </p>
           </>
@@ -313,30 +313,32 @@ const UploadPage = () => {
       {/* File List */}
       {files.length > 0 && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm font-medium">
               {files.length} archivo{files.length !== 1 ? "s" : ""} ·{" "}
               {doneCount} procesado{doneCount !== 1 ? "s" : ""}
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-shrink-0 gap-2">
               <button
                 onClick={handleClear}
                 disabled={isProcessing}
-                className="inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
+                className="inline-flex h-9 flex-1 items-center justify-center rounded-md border px-3 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50 sm:flex-initial"
               >
                 Limpiar
               </button>
               <button
                 onClick={handleUploadAndProcess}
                 disabled={isProcessing || processableCount === 0}
-                className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50 sm:flex-initial"
               >
                 {isProcessing ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
                 ) : null}
-                {isProcessing
-                  ? "Procesando..."
-                  : `Procesar ${processableCount} archivo${processableCount !== 1 ? "s" : ""}`}
+                <span className="truncate">
+                  {isProcessing
+                    ? "Procesando..."
+                    : `Procesar ${processableCount} archivo${processableCount !== 1 ? "s" : ""}`}
+                </span>
               </button>
             </div>
           </div>
@@ -345,14 +347,14 @@ const UploadPage = () => {
             {files.map((f, idx) => (
               <div
                 key={`${f.file.name}-${idx}`}
-                className="flex items-center gap-3 rounded-lg border bg-card p-3"
+                className="flex flex-wrap items-start gap-2 rounded-lg border bg-card p-2 sm:flex-nowrap sm:items-center sm:gap-3 sm:p-3"
               >
-                <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
+                <FileText className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground sm:mt-0" />
+                <div className="min-w-0 flex-1 basis-full sm:basis-auto">
                   <p className="truncate text-sm font-medium">
                     {f.file.name}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="line-clamp-2 text-xs text-muted-foreground sm:line-clamp-none">
                     {(f.file.size / 1024).toFixed(1)} KB
                     {f.docType
                       ? ` · ${DOC_TYPE_LABELS[f.docType] ?? f.docType}`
@@ -363,8 +365,19 @@ const UploadPage = () => {
                   </p>
                 </div>
 
-                {/* Status */}
-                <div className="flex shrink-0 items-center gap-2">
+                {/* Status + Validar */}
+                <div className="flex shrink-0 items-center gap-2 self-center sm:self-auto">
+                  {f.status === "done" && f.documentId && (
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/documents/${f.documentId}`)}
+                      className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                      aria-label={`Validar datos de ${f.file.name}`}
+                      tabIndex={0}
+                    >
+                      VALIDAR
+                    </button>
+                  )}
                   {f.status === "pending" && (
                     <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
                       Pendiente
@@ -410,9 +423,9 @@ const UploadPage = () => {
           </div>
 
           {doneCount > 0 && !isProcessing && (
-            <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/5 p-3">
-              <AlertCircle className="h-4 w-4 text-success" />
-              <p className="text-sm text-success">
+            <div className="flex flex-wrap items-start gap-2 rounded-lg border border-success/30 bg-success/5 p-3 sm:flex-nowrap sm:items-center">
+              <AlertCircle className="h-4 w-4 shrink-0 text-success" />
+              <p className="text-xs text-success sm:text-sm">
                 {doneCount} documento{doneCount !== 1 ? "s" : ""} procesado
                 {doneCount !== 1 ? "s" : ""} correctamente.{" "}
                 <button

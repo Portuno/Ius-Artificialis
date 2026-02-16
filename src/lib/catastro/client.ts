@@ -3,8 +3,28 @@ import type { CatastroProperty, CatastroQueryResult } from "./types";
 // Servicio oficial gratuito del Catastro (Sede Electrónica)
 // Endpoint Consulta_DNPRC: datos no protegidos de inmuebles por referencia catastral
 // Documentación: https://ovc.catastro.meh.es/ovcservweb/ovcswlocalizacionrc/ovccallejero.asmx?op=Consulta_DNPRC
+//
+// ── Análisis de información recibida y limitaciones ─────────────────────────
+// • Urbano (cn=UR): dirección (tv, nv, pnp), provincia (np), municipio (nm),
+//   uso (luso), superficie (sfc), año (ant). Opcionales: ldt, lbl, lnes, lplt, lpta, cpt, cucons.
+// • Rústico (cn=RU): suele venir sin dirección ni superficie construida; solo
+//   provincia, municipio, tipo y a veces uso. Para parcela/cultivos hace falta
+//   otra consulta o ver la ficha en la Sede.
+// • Si se envía RC de 14 caracteres (parcela), el servicio devuelve lista de
+//   inmuebles; el parser actual toma el primero. Para “consultar todos” se
+//   usa una RC completa por propiedad.
+// • Solución para datos faltantes: enlace a la Sede (RCCompleta) para que el
+//   usuario consulte la ficha oficial y, si en el futuro se integra otro
+//   endpoint (ej. subparcelas), ampliar el parser.
 const OVC_BASE =
   "https://ovc.catastro.meh.es/ovcservweb/OVCSWLocalizacionRC/OVCCallejero.asmx/Consulta_DNPRC";
+
+/** URL de la Sede Electrónica del Catastro para consultar un inmueble por referencia catastral. */
+export const getCatastroPropertyUrl = (referenciaCatastral: string): string => {
+  const rc = referenciaCatastral?.trim() || "";
+  if (!rc) return "https://www1.sedecatastro.gob.es/CYCBienInmueble/OVCBusqueda.aspx";
+  return `https://www1.sedecatastro.gob.es/CYCBienInmueble/OVCBusqueda.aspx?RCCompleta=${encodeURIComponent(rc)}`;
+};
 
 export const queryCatastro = async (
   referenciaCatastral: string
@@ -140,6 +160,14 @@ const parseOvcXml = (xml: string, rc: string): CatastroProperty => {
   const pnp = extractXmlTag(xml, "pnp") ?? "";
   const direccion = [tv, nv, pnp].filter(Boolean).join(" ").trim();
 
+  // Tipo de bien (idbi/cn): UR = Urbano, RU = Rústico
+  const cn = extractXmlTag(xml, "cn");
+  const tipo_bien: CatastroProperty["tipo_bien"] =
+    cn === "UR" || cn === "RU" ? cn : null;
+
+  // Domicilio tributario (texto)
+  const domicilio_tributario = extractXmlTag(xml, "ldt") ?? null;
+
   // Use
   const uso = extractXmlTag(xml, "luso") ?? null;
 
@@ -151,6 +179,37 @@ const parseOvcXml = (xml: string, rc: string): CatastroProperty => {
   const antStr = extractXmlTag(xml, "ant");
   const anio_construccion = antStr ? parseInt(antStr, 10) || null : null;
 
+  // Localización interna (bloque, escalera, planta, puerta)
+  const bloque = extractXmlTag(xml, "lbl") ?? null;
+  const escalera = extractXmlTag(xml, "lnes") ?? null;
+  const planta = extractXmlTag(xml, "lplt") ?? null;
+  const puerta = extractXmlTag(xml, "lpta") ?? null;
+
+  // Coeficiente de participación (cpt)
+  const cptStr = extractXmlTag(xml, "cpt");
+  const coeficiente_participacion = cptStr
+    ? parseFloat(cptStr.replace(",", ".")) || null
+    : null;
+
+  // Número de unidades constructivas (cucons)
+  const cuconsStr = extractXmlTag(xml, "cucons");
+  const num_unidades_constructivas = cuconsStr
+    ? parseInt(cuconsStr, 10) || null
+    : null;
+
+  const raw_data: Record<string, unknown> = {
+    source: "ovc.catastro.meh.es",
+    xmlLength: xml.length,
+    tipo_bien: tipo_bien ?? undefined,
+    domicilio_tributario: domicilio_tributario ?? undefined,
+    bloque: bloque ?? undefined,
+    escalera: escalera ?? undefined,
+    planta: planta ?? undefined,
+    puerta: puerta ?? undefined,
+    coeficiente_participacion: coeficiente_participacion ?? undefined,
+    num_unidades_constructivas: num_unidades_constructivas ?? undefined,
+  };
+
   return {
     direccion,
     provincia,
@@ -159,10 +218,15 @@ const parseOvcXml = (xml: string, rc: string): CatastroProperty => {
     uso,
     anio_construccion,
     referencia_catastral: rc,
-    raw_data: {
-      source: "ovc.catastro.meh.es",
-      xmlLength: xml.length,
-    },
+    tipo_bien,
+    domicilio_tributario,
+    bloque,
+    escalera,
+    planta,
+    puerta,
+    coeficiente_participacion,
+    num_unidades_constructivas,
+    raw_data,
   };
 };
 
