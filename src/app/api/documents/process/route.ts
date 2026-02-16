@@ -110,11 +110,13 @@ export const POST = async (request: Request) => {
                 tipos_iva: [] as { porcentaje: number; importe: number }[],
                 total: { value: null as number | null, confidence: 0 },
                 concepto: { value: null as string | null, confidence: 0 },
+                page_number: null as number | null,
               },
             ]
           : extractions;
 
-      for (const extraction of toInsert) {
+      for (let idx = 0; idx < toInsert.length; idx++) {
+        const extraction = toInsert[idx];
         const confidenceScores: Record<string, number> = {
           emisor: extraction.emisor.confidence,
           cif: extraction.cif.confidence,
@@ -124,6 +126,11 @@ export const POST = async (request: Request) => {
           concepto: extraction.concepto.confidence,
           numero_factura: extraction.numero_factura.confidence,
         };
+
+        // Use page_number from extraction if available, otherwise fallback to index + 1
+        // This provides a reasonable default even if Gemini couldn't determine the page
+        const pageNumber =
+          extraction.page_number != null ? extraction.page_number : idx + 1;
 
         await supabase.from("invoices").insert({
           document_id,
@@ -136,6 +143,7 @@ export const POST = async (request: Request) => {
           total: extraction.total.value,
           concepto: extraction.concepto.value,
           numero_factura: extraction.numero_factura.value,
+          page_number: pageNumber,
           confidence_scores: confidenceScores,
         });
       }

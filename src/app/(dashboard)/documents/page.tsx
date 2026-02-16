@@ -59,7 +59,7 @@ const DocumentsPage = async () => {
   const supabase = await createClient();
   const { data: documents } = await supabase
     .from("documents")
-    .select("*")
+    .select("*, expedientes(numero_expediente, titulo)")
     .order("created_at", { ascending: false });
 
   return (
@@ -97,8 +97,9 @@ const DocumentsPage = async () => {
         </div>
       ) : (
         <div className="rounded-lg border bg-card">
-          <div className="grid grid-cols-[1fr_150px_120px_120px_100px] gap-4 border-b px-4 py-3 text-sm font-medium text-muted-foreground">
+          <div className="grid grid-cols-[1fr_180px_150px_120px_120px_100px] gap-4 border-b px-4 py-3 text-sm font-medium text-muted-foreground">
             <div>Nombre</div>
+            <div>Expediente</div>
             <div>Tipo</div>
             <div>Estado</div>
             <div>Confianza</div>
@@ -114,15 +115,25 @@ const DocumentsPage = async () => {
               STATUS_CONFIG.pending;
             const Icon = typeConfig.icon;
 
+            const expediente = Array.isArray(doc.expedientes)
+              ? doc.expedientes[0]
+              : (doc.expedientes as { numero_expediente: string; titulo: string } | null);
+            const expedienteDisplay = expediente
+              ? `${expediente.numero_expediente} - ${expediente.titulo}`
+              : "—";
+
             return (
               <Link
                 key={doc.id}
                 href={`/documents/${doc.id}`}
-                className="grid grid-cols-[1fr_150px_120px_120px_100px] gap-4 border-b px-4 py-3 text-sm transition-colors last:border-b-0 hover:bg-muted/50"
+                className="grid grid-cols-[1fr_180px_150px_120px_120px_100px] gap-4 border-b px-4 py-3 text-sm transition-colors last:border-b-0 hover:bg-muted/50"
               >
                 <div className="flex items-center gap-2 truncate">
                   <Icon className={`h-4 w-4 shrink-0 ${typeConfig.color}`} />
                   <span className="truncate font-medium">{doc.file_name}</span>
+                </div>
+                <div className="truncate text-muted-foreground" title={expedienteDisplay}>
+                  {expedienteDisplay}
                 </div>
                 <div className={typeConfig.color}>{typeConfig.label}</div>
                 <div>

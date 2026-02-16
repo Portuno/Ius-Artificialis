@@ -82,6 +82,8 @@ const DocumentDetailClient = ({
     invoices.every((inv) => inv.validated);
   const isValidated = doc.status === "validated";
 
+  // Always use page_number if available, otherwise fallback to index + 1
+  // page_number should always be set (either from Gemini or as fallback during extraction)
   const pdfPage =
     selectedInvoice?.page_number != null
       ? selectedInvoice.page_number

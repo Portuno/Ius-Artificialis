@@ -28,7 +28,7 @@ Los importes deben ser números decimales (ej: 1234.56).`;
 
 const INVOICES_PROMPT = `Eres un sistema experto de extracción de datos de facturas para un despacho jurídico y contable español.
 
-El documento puede contener **una o más facturas**. Identifica cada factura (por ejemplo cada página puede ser una factura, o puede haber varias en una página). Para cada factura extrae exactamente los mismos campos:
+El documento puede contener **una o más facturas**. Identifica cada factura (por ejemplo cada página puede ser una factura, o puede haber varias en una página, o una factura puede extenderse por múltiples páginas). Para cada factura extrae exactamente los mismos campos:
 
 1. **emisor**: Nombre o razón social del emisor
 2. **cif**: CIF/NIF del emisor
@@ -38,6 +38,9 @@ El documento puede contener **una o más facturas**. Identifica cada factura (po
 6. **tipos_iva**: Array con cada tipo de IVA (porcentaje e importe)
 7. **total**: Importe total en euros
 8. **concepto**: Descripción o concepto principal
+9. **page_number**: Número de página del PDF donde se encuentra esta factura (empezando desde 1). Si la factura ocupa múltiples páginas, indica la primera página donde aparece. Si puedes identificar la página basándote en números de página visibles en el documento, márcalos, números de página, encabezados o pies de página, úsalos. Si no puedes determinar la página con certeza, devuelve null.
+
+IMPORTANTE: El campo page_number es crítico para la navegación del usuario. Intenta siempre identificar la página cuando sea posible. Si el documento tiene números de página visibles, úsalos. Si no, intenta inferir la página basándote en el orden de aparición de las facturas en el documento.
 
 Devuelve un objeto con una propiedad "facturas" que sea un array: un elemento por cada factura encontrada en el documento. Si solo hay una factura, el array tendrá un solo elemento. Para cada campo de cada factura proporciona "value" (null si no se encuentra) y "confidence" (0.0 a 1.0). Los importes deben ser números decimales (ej: 1234.56).`;
 

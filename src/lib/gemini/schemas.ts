@@ -51,6 +51,13 @@ export const invoiceExtractionItemSchema = z.object({
     value: z.string().nullable(),
     confidence: z.number().min(0).max(1),
   }),
+  page_number: z
+    .number()
+    .int()
+    .positive()
+    .nullable()
+    .optional()
+    .describe("Número de página del PDF donde se encuentra esta factura (1-indexed). Si la factura ocupa múltiples páginas, indica la primera página donde aparece. Si no puedes determinar la página, devuelve null."),
 });
 
 /** @deprecated Use invoiceExtractionItemSchema. Kept for backward compatibility. */
