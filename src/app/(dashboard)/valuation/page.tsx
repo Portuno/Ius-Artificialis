@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import {
@@ -20,17 +20,27 @@ const ValuationPage = () => {
   const [properties, setProperties] = useState<Property[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [queryingId, setQueryingId] = useState<string | null>(null);
+  const lastLoadRequestIdRef = useRef(0);
   const [queryAllProgress, setQueryAllProgress] = useState<{
     current: number;
     total: number;
   } | null>(null);
 
   const loadProperties = useCallback(async () => {
+    const requestId = ++lastLoadRequestIdRef.current;
     const supabase = createClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("properties")
       .select("*")
       .order("created_at", { ascending: false });
+
+    if (requestId !== lastLoadRequestIdRef.current) return;
+    if (error) {
+      toast.error("No se pudieron cargar los inmuebles");
+      setProperties([]);
+      setIsLoading(false);
+      return;
+    }
 
     setProperties(data ?? []);
     setIsLoading(false);
@@ -58,14 +68,24 @@ const ValuationPage = () => {
         }),
       });
 
-      const data = await res.json();
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
 
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) {
+        throw new Error(
+          data?.error ??
+            `Error (${res.status}) al consultar el Catastro`
+        );
+      }
 
       if (!options?.silent) {
         toast.success("Datos del Catastro obtenidos");
       }
-      loadProperties();
+      await loadProperties();
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -93,6 +113,7 @@ const ValuationPage = () => {
       }
     }
 
+    await loadProperties();
     setQueryAllProgress(null);
     toast.success(
       pending.length === 1
@@ -135,7 +156,7 @@ const ValuationPage = () => {
         {pendingCount > 0 && (
           <button
             onClick={handleQueryAll}
-            disabled={queryingId !== null}
+            disabled={queryingId !== null || queryAllProgress !== null}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             aria-label={`Consultar Catastro de ${pendingCount} inmuebles`}
           >
