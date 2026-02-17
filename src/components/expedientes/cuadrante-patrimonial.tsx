@@ -83,7 +83,7 @@ const CuadrantePatrimonial = ({ properties }: CuadrantePatrimonialProps) => {
                             );
                             try {
                               await navigator.clipboard.writeText(
-                                property.referencia_catastral
+                                property.referencia_catastral ?? ""
                               );
                             } catch {
                               /* ignore */

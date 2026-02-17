@@ -200,6 +200,8 @@ const UploadPage = () => {
           }
         );
       } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Error desconocido";
         setFiles((prev) =>
           prev.map((f, idx) =>
             idx === i
@@ -207,15 +209,14 @@ const UploadPage = () => {
                   ...f,
                   status: "error",
                   documentId,
-                  error:
-                    error instanceof Error
-                      ? error.message
-                      : "Error desconocido",
+                  error: errorMessage,
                 }
               : f
           )
         );
-        toast.error(`Error con ${uploadedFile.file.name}`);
+        toast.error(`Error con ${uploadedFile.file.name}`, {
+          description: errorMessage,
+        });
       }
     }
 

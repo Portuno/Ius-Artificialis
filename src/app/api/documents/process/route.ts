@@ -17,6 +17,16 @@ export const POST = async (request: Request) => {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
+    if (!process.env.GOOGLE_GEMINI_API_KEY) {
+      return NextResponse.json(
+        {
+          error:
+            "GOOGLE_GEMINI_API_KEY no está configurada en el servidor. Añádela en Vercel: Project Settings > Environment Variables.",
+        },
+        { status: 503 }
+      );
+    }
+
     const { document_id } = await request.json();
 
     if (!document_id) {
@@ -385,9 +395,8 @@ export const POST = async (request: Request) => {
       // Ignore cleanup errors
     }
 
-    return NextResponse.json(
-      { error: "Error procesando documento" },
-      { status: 500 }
-    );
+    const message =
+      error instanceof Error ? error.message : "Error procesando documento";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 };
