@@ -1,6 +1,11 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { Menu } from "lucide-react";
+
+type HeaderProps = {
+  handleToggleSidebar?: () => void;
+};
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "Dashboard",
@@ -13,7 +18,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/export": "Exportar Datos",
 };
 
-const Header = () => {
+const Header = ({ handleToggleSidebar }: HeaderProps) => {
   const pathname = usePathname();
 
   const getTitle = () => {
@@ -32,8 +37,22 @@ const Header = () => {
   };
 
   return (
-    <header className="flex h-16 items-center border-b bg-card px-6">
-      <h1 className="text-xl font-semibold tracking-tight">{getTitle()}</h1>
+    <header className="flex h-16 items-center border-b bg-card px-4 sm:px-6">
+      <div className="flex flex-1 items-center gap-3">
+        {handleToggleSidebar && (
+          <button
+            type="button"
+            onClick={handleToggleSidebar}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent bg-transparent text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:hidden"
+            aria-label="Abrir navegación"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        )}
+        <h1 className="truncate text-lg font-semibold tracking-tight sm:text-xl">
+          {getTitle()}
+        </h1>
+      </div>
     </header>
   );
 };
