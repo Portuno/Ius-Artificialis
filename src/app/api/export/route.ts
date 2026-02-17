@@ -79,6 +79,7 @@ export const POST = async (request: Request) => {
           tipos_iva: inv.tipos_iva,
           total: inv.total,
           concepto: inv.concepto,
+          items: (inv as any).items ?? [],
         })),
         inheritance_deeds: (deeds ?? []).map((deed) => ({
           document: deed.document_id,
@@ -130,6 +131,27 @@ export const POST = async (request: Request) => {
         }));
         const ws = XLSX.utils.json_to_sheet(invoiceRows);
         XLSX.utils.book_append_sheet(wb, ws, "Facturas");
+
+        const itemRows = invoices.flatMap((inv) => {
+          const items = Array.isArray((inv as any).items) ? (inv as any).items : [];
+          return items.map((item: any) => ({
+            "Factura ID": inv.id,
+            Documento: inv.document_id,
+            Emisor: inv.emisor ?? "",
+            "N.º Factura": inv.numero_factura ?? "",
+            Fecha: inv.fecha ?? "",
+            Descripción: item?.descripcion?.value ?? "",
+            Cantidad: item?.cantidad?.value ?? "",
+            Unidad: item?.unidad?.value ?? "",
+            "Precio Unitario": item?.precio_unitario?.value ?? "",
+            Importe: item?.importe?.value ?? "",
+          }));
+        });
+
+        if (itemRows.length > 0) {
+          const wsItems = XLSX.utils.json_to_sheet(itemRows);
+          XLSX.utils.book_append_sheet(wb, wsItems, "ItemsFactura");
+        }
       }
 
       // Deeds sheet

@@ -100,6 +100,19 @@ export interface IvaEntry {
   importe: number;
 }
 
+export interface ConfidenceValue<T> {
+  value: T | null;
+  confidence: number;
+}
+
+export interface InvoiceLineItem {
+  descripcion: ConfidenceValue<string>;
+  cantidad: ConfidenceValue<number>;
+  unidad: ConfidenceValue<string>;
+  precio_unitario: ConfidenceValue<number>;
+  importe: ConfidenceValue<number>;
+}
+
 export interface Invoice {
   id: string;
   document_id: string;
@@ -112,6 +125,7 @@ export interface Invoice {
   total: number | null;
   concepto: string | null;
   numero_factura: string | null;
+  items?: InvoiceLineItem[];
   confidence_scores: Record<string, number>;
   validated: boolean;
   validated_by: string | null;

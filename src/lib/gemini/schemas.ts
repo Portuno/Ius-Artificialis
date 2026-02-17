@@ -1,5 +1,44 @@
 import { z } from "zod";
 
+const confidenceValueSchema = <T extends z.ZodTypeAny>(valueSchema: T) =>
+  z.object({
+    value: valueSchema.nullable(),
+    confidence: z.number().min(0).max(1),
+  });
+
+const confidenceValueWithDefault = <T extends z.ZodTypeAny>(valueSchema: T) =>
+  confidenceValueSchema(valueSchema)
+    .optional()
+    .default({ value: null, confidence: 0 });
+
+const coerceValueField = (v: unknown) => {
+  if (typeof v === "object" && v != null && "value" in v) {
+    // Gemini sometimes returns { value, confidence } even when not requested.
+    return (v as any).value;
+  }
+  return v;
+};
+
+const coerceNumberSchema = (nullable: boolean) =>
+  z.preprocess((v) => {
+    const raw = coerceValueField(v);
+    if (typeof raw === "string") {
+      const normalized = raw.replace(",", ".");
+      const parsed = Number(normalized);
+      return Number.isFinite(parsed) ? parsed : raw;
+    }
+    return raw;
+  }, nullable ? z.number().nullable() : z.number());
+
+// --- Invoice Line Items Schema ---
+export const invoiceLineItemSchema = z.object({
+  descripcion: confidenceValueWithDefault(z.string()),
+  cantidad: confidenceValueWithDefault(z.number()),
+  unidad: confidenceValueWithDefault(z.string()),
+  precio_unitario: confidenceValueWithDefault(z.number()),
+  importe: confidenceValueWithDefault(z.number()),
+});
+
 // --- Classification Schema ---
 export const classificationSchema = z.object({
   document_type: z.enum([
@@ -39,8 +78,8 @@ export const invoiceExtractionItemSchema = z.object({
   }),
   tipos_iva: z.array(
     z.object({
-      porcentaje: z.number(),
-      importe: z.number(),
+      porcentaje: coerceNumberSchema(true),
+      importe: coerceNumberSchema(true),
     })
   ),
   total: z.object({
@@ -51,13 +90,21 @@ export const invoiceExtractionItemSchema = z.object({
     value: z.string().nullable(),
     confidence: z.number().min(0).max(1),
   }),
-  page_number: z
-    .number()
-    .int()
-    .positive()
-    .nullable()
+  items: z
+    .array(invoiceLineItemSchema)
     .optional()
-    .describe("Número de página del PDF donde se encuentra esta factura (1-indexed). Si la factura ocupa múltiples páginas, indica la primera página donde aparece. Si no puedes determinar la página, devuelve null."),
+    .default([])
+    .describe(
+      "Desglose de líneas de la factura (items). Cada item incluye value/confidence por campo. Puede ser un array vacío si no se distinguen líneas."
+    ),
+  page_number: z
+    .preprocess(
+      (v) => coerceValueField(v),
+      z.number().int().positive().nullable().optional()
+    )
+    .describe(
+      "Número de página del PDF donde se encuentra esta factura (1-indexed). Si la factura ocupa múltiples páginas, indica la primera página donde aparece. Si no puedes determinar la página, devuelve null."
+    ),
 });
 
 /** @deprecated Use invoiceExtractionItemSchema. Kept for backward compatibility. */

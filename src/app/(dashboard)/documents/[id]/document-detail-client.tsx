@@ -19,6 +19,7 @@ import {
 import type {
   Document,
   Invoice,
+  InvoiceLineItem,
   InheritanceDeed,
   Heir,
   Property,
@@ -54,6 +55,34 @@ const invoiceToDraft = (inv: Invoice): InvoiceDraft => ({
   concepto: inv.concepto ?? "",
 });
 
+const normalizeInvoiceItems = (items: unknown): InvoiceLineItem[] => {
+  if (!Array.isArray(items)) return [];
+
+  return items.filter((item): item is InvoiceLineItem => {
+    if (!item || typeof item !== "object") return false;
+    const anyItem = item as any;
+    return (
+      anyItem.descripcion &&
+      typeof anyItem.descripcion === "object" &&
+      "value" in anyItem.descripcion &&
+      "confidence" in anyItem.descripcion
+    );
+  });
+};
+
+const isFuelItemDescription = (text: string) =>
+  /gasoil|gasóleo|gasoleo|diesel/i.test(text);
+
+const formatMaybeCurrency = (value: number | null | undefined) => {
+  if (value == null) return "—";
+  return `${value.toLocaleString("es-ES")} €`;
+};
+
+const formatMaybeQuantity = (value: number | null | undefined) => {
+  if (value == null) return "—";
+  return value.toLocaleString("es-ES");
+};
+
 const DocumentDetailClient = ({
   document: doc,
   invoices,
@@ -77,6 +106,7 @@ const DocumentDetailClient = ({
 
   const selectedInvoice =
     invoices.length > 0 ? invoices[selectedInvoiceIndex] ?? invoices[0] : null;
+  const selectedInvoiceItems = normalizeInvoiceItems(selectedInvoice?.items);
   const allInvoicesValidated =
     invoices.length > 0 &&
     invoices.every((inv) => inv.validated);
@@ -405,6 +435,8 @@ const DocumentDetailClient = ({
                 )}
               </h4>
 
+              <InvoiceItemsSection items={selectedInvoiceItems} />
+
               {isEditingInvoice && draftInvoice ? (
                 <div className="grid grid-cols-2 gap-3">
                   <FieldEdit
@@ -698,6 +730,120 @@ const DocumentDetailClient = ({
                 </p>
               </div>
             )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const InvoiceItemsSection = ({ items }: { items: InvoiceLineItem[] }) => {
+  const fuelItems = items.filter((item) =>
+    isFuelItemDescription(item.descripcion.value ?? "")
+  );
+  const fuelLiters = fuelItems.reduce((sum, item) => {
+    const unit = (item.unidad.value ?? "").toLowerCase();
+    const isLiters = unit === "l" || unit.includes("lit");
+    const qty = item.cantidad.value ?? 0;
+    return sum + (isLiters ? qty : 0);
+  }, 0);
+  const fuelAmount = fuelItems.reduce(
+    (sum, item) => sum + (item.importe.value ?? 0),
+    0
+  );
+
+  if (items.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed bg-muted/30 p-3">
+        <p className="text-xs font-medium text-muted-foreground">
+          Desglose de ítems
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          No se detectó un desglose de líneas en esta factura.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">
+            Desglose de ítems ({items.length})
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            Prioritario para validación (p.ej. Gasoil A: litros e importe)
+          </p>
+        </div>
+        {fuelItems.length > 0 && (
+          <div className="shrink-0 rounded-md border border-amber-300/40 bg-amber-50/50 px-2 py-1 text-right text-xs dark:bg-amber-950/20">
+            <p className="font-medium">Combustible detectado</p>
+            <p className="text-muted-foreground">
+              {fuelLiters > 0 ? `${fuelLiters.toLocaleString("es-ES")} L · ` : ""}
+              {formatMaybeCurrency(fuelAmount)}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-lg border">
+        <div className="grid grid-cols-12 gap-2 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+          <div className="col-span-7">Descripción</div>
+          <div className="col-span-3 text-right">Cantidad</div>
+          <div className="col-span-2 text-right">Importe</div>
+        </div>
+        <div className="divide-y">
+          {items.map((item, idx) => {
+            const desc = item.descripcion.value ?? "";
+            const isFuel = isFuelItemDescription(desc);
+            const rowConfidence = Math.min(
+              item.descripcion.confidence,
+              item.cantidad.confidence,
+              item.unidad.confidence,
+              item.precio_unitario.confidence,
+              item.importe.confidence
+            );
+
+            const qty = formatMaybeQuantity(item.cantidad.value);
+            const unit = item.unidad.value ?? "";
+            const qtyWithUnit = unit ? `${qty} ${unit}` : qty;
+
+            return (
+              <div
+                key={`${desc}-${idx}`}
+                className={
+                  isFuel ? "bg-amber-50/40 dark:bg-amber-950/10" : "bg-card"
+                }
+              >
+                <div className="grid grid-cols-12 gap-2 px-3 py-2 text-sm">
+                  <div className="col-span-7 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate font-medium">{desc || "—"}</p>
+                      <ConfidenceIndicator confidence={rowConfidence} />
+                      {isFuel && (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">
+                          Fuel
+                        </span>
+                      )}
+                    </div>
+                    {(item.precio_unitario.value != null ||
+                      item.precio_unitario.confidence > 0) && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Precio unitario:{" "}
+                        {formatMaybeCurrency(item.precio_unitario.value)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="col-span-3 text-right font-medium">
+                    {qtyWithUnit}
+                  </div>
+                  <div className="col-span-2 text-right font-medium">
+                    {formatMaybeCurrency(item.importe.value)}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

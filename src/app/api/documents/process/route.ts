@@ -116,6 +116,7 @@ export const POST = async (request: Request) => {
                 cif: { value: null as string | null, confidence: 0 },
                 numero_factura: { value: null as string | null, confidence: 0 },
                 fecha: { value: null as string | null, confidence: 0 },
+                items: [] as unknown[],
                 base_imponible: { value: null as number | null, confidence: 0 },
                 tipos_iva: [] as { porcentaje: number; importe: number }[],
                 total: { value: null as number | null, confidence: 0 },
@@ -127,6 +128,28 @@ export const POST = async (request: Request) => {
 
       for (let idx = 0; idx < toInsert.length; idx++) {
         const extraction = toInsert[idx];
+
+        const sanitizedTiposIva = (extraction.tipos_iva ?? []).filter(
+          (entry: any) =>
+            typeof entry?.porcentaje === "number" &&
+            Number.isFinite(entry.porcentaje) &&
+            typeof entry?.importe === "number" &&
+            Number.isFinite(entry.importe)
+        );
+
+        const itemConfidences: number[] = (extraction.items ?? []).flatMap(
+          (item: any) => [
+            item?.descripcion?.confidence,
+            item?.cantidad?.confidence,
+            item?.unidad?.confidence,
+            item?.precio_unitario?.confidence,
+            item?.importe?.confidence,
+          ]
+        ).filter((n: unknown): n is number => typeof n === "number");
+
+        const itemsMinConfidence =
+          itemConfidences.length > 0 ? Math.min(...itemConfidences) : 0;
+
         const confidenceScores: Record<string, number> = {
           emisor: extraction.emisor.confidence,
           cif: extraction.cif.confidence,
@@ -135,6 +158,7 @@ export const POST = async (request: Request) => {
           total: extraction.total.confidence,
           concepto: extraction.concepto.confidence,
           numero_factura: extraction.numero_factura.confidence,
+          items_min_confidence: itemsMinConfidence,
         };
 
         // Use page_number from extraction if available, otherwise fallback to index + 1
@@ -142,20 +166,39 @@ export const POST = async (request: Request) => {
         const pageNumber =
           extraction.page_number != null ? extraction.page_number : idx + 1;
 
-        await supabase.from("invoices").insert({
+        const insertPayload = {
           document_id,
           user_id: user.id,
           emisor: extraction.emisor.value,
           cif: extraction.cif.value,
           fecha: extraction.fecha.value,
           base_imponible: extraction.base_imponible.value,
-          tipos_iva: extraction.tipos_iva,
+          tipos_iva: sanitizedTiposIva,
           total: extraction.total.value,
           concepto: extraction.concepto.value,
           numero_factura: extraction.numero_factura.value,
           page_number: pageNumber,
           confidence_scores: confidenceScores,
-        });
+          items: extraction.items ?? [],
+        };
+
+        const { error: insertError } = await supabase
+          .from("invoices")
+          .insert(insertPayload);
+
+        // Backward-compat fallback (if migration not applied yet): retry without items.
+        if (insertError) {
+          const message = insertError.message ?? "";
+          const isMissingItemsColumn =
+            message.includes("items") &&
+            (message.toLowerCase().includes("column") ||
+              message.toLowerCase().includes("does not exist"));
+
+          if (isMissingItemsColumn) {
+            const { items: _items, ...withoutItems } = insertPayload as any;
+            await supabase.from("invoices").insert(withoutItems);
+          }
+        }
       }
 
       // Auto-generate sujetos and timeline for expediente (dedupe emisores by CIF then nombre)
